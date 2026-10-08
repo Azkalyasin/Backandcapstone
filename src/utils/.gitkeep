@@ -1,0 +1,4 @@
+# TODO: Tambahkan utility functions:
+# - tokenUtils.js (generate dan verify JWT)
+# - hashUtils.js (bcrypt hash dan compare)
+# - responseUtils.js (standarisasi format response API)

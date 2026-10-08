@@ -1,0 +1,4 @@
+# TODO: Tambahkan middleware:
+# - authMiddleware.js (verifikasi JWT token)
+# - validationMiddleware.js (validasi input menggunakan express-validator)
+# - uploadMiddleware.js (konfigurasi multer untuk upload foto)
