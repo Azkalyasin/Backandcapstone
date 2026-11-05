@@ -1,19 +1,35 @@
-// TODO: Implementasi controller untuk autentikasi admin
+const jwt = require('jsonwebtoken');
+const Admin = require('../models/Admin');
+const { ok, fail } = require('../utils/response');
 
-// Login admin
+// POST /api/auth/login
 exports.login = async (req, res) => {
-  // TODO: Implementasi login
-  res.status(501).json({ message: 'Login belum diimplementasikan' });
+  const { username, password } = req.body;
+  const admin = await Admin.findOne({ username: String(username).toLowerCase().trim() }).select('+password');
+  if (!admin || !(await admin.comparePassword(password))) {
+    return fail(res, 401, 'Username atau password salah');
+  }
+
+  const token = jwt.sign({ sub: admin.id, username: admin.username }, process.env.JWT_SECRET, {
+    expiresIn: process.env.JWT_EXPIRES_IN || '1d',
+  });
+
+  return ok(res, { token, user: admin.toJSON() }, 'Login berhasil');
 };
 
-// Logout admin
-exports.logout = async (req, res) => {
-  // TODO: Implementasi logout
-  res.status(501).json({ message: 'Logout belum diimplementasikan' });
-};
+// POST /api/auth/logout
+// JWT bersifat stateless: logout cukup dengan menghapus token di sisi frontend.
+exports.logout = async (req, res) => ok(res, undefined, 'Logout berhasil');
 
-// Get profile admin yang sedang login
-exports.getProfile = async (req, res) => {
-  // TODO: Implementasi get profile
-  res.status(501).json({ message: 'Get profile belum diimplementasikan' });
+// GET /api/auth/profile
+exports.getProfile = async (req, res) => ok(res, req.admin.toJSON());
+
+// PUT /api/auth/password
+exports.changePassword = async (req, res) => {
+  const { passwordLama, passwordBaru } = req.body;
+  const admin = await Admin.findById(req.admin.id).select('+password');
+  if (!(await admin.comparePassword(passwordLama))) return fail(res, 400, 'Password lama salah');
+  admin.password = passwordBaru;
+  await admin.save();
+  return ok(res, undefined, 'Password berhasil diubah');
 };

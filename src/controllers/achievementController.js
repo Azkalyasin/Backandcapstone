@@ -1,31 +1,54 @@
-// TODO: Implementasi controller untuk achievement
+const Achievement = require('../models/Achievement');
+const { ok, fail, getPagination, paginationMeta, searchRegex } = require('../utils/response');
 
-// Get semua achievement (public)
+const FIELDS = ['namaSiswa', 'judul', 'deskripsi', 'kategori', 'tahun', 'tanggal', 'foto'];
+function pick(body) {
+  const data = Object.fromEntries(FIELDS.filter((f) => body[f] !== undefined).map((f) => [f, body[f]]));
+  // Isi tahun otomatis dari tanggal jika tidak dikirim.
+  if (!data.tahun && data.tanggal) data.tahun = Number(String(data.tanggal).slice(0, 4)) || undefined;
+  return data;
+}
+
+// GET /api/achievements?page&limit&search&kategori
 exports.getAllAchievements = async (req, res) => {
-  // TODO: Implementasi get all achievements
-  res.status(501).json({ message: 'Get all achievements belum diimplementasikan' });
+  const { page, limit, skip } = getPagination(req.query);
+  const filter = {};
+  if (req.query.search) {
+    const rx = searchRegex(req.query.search);
+    filter.$or = [{ namaSiswa: rx }, { judul: rx }];
+  }
+  if (req.query.kategori) filter.kategori = req.query.kategori;
+
+  const [achievements, totalData] = await Promise.all([
+    Achievement.find(filter).sort({ tanggal: -1, createdAt: -1 }).skip(skip).limit(limit),
+    Achievement.countDocuments(filter),
+  ]);
+  return ok(res, { achievements, pagination: paginationMeta(page, limit, totalData) });
 };
 
-// Get detail achievement (public)
+// GET /api/achievements/:id
 exports.getAchievementById = async (req, res) => {
-  // TODO: Implementasi get achievement by id
-  res.status(501).json({ message: 'Get achievement by id belum diimplementasikan' });
+  const achievement = await Achievement.findById(req.params.id);
+  if (!achievement) return fail(res, 404, 'Achievement tidak ditemukan');
+  return ok(res, achievement);
 };
 
-// Create achievement dengan upload foto (admin only)
+// POST /api/achievements (admin)
 exports.createAchievement = async (req, res) => {
-  // TODO: Implementasi create achievement dengan multer untuk upload foto
-  res.status(501).json({ message: 'Create achievement belum diimplementasikan' });
+  const achievement = await Achievement.create(pick(req.body));
+  return ok(res, achievement, 'Achievement berhasil dibuat', 201);
 };
 
-// Update achievement (admin only)
+// PUT /api/achievements/:id (admin)
 exports.updateAchievement = async (req, res) => {
-  // TODO: Implementasi update achievement
-  res.status(501).json({ message: 'Update achievement belum diimplementasikan' });
+  const achievement = await Achievement.findByIdAndUpdate(req.params.id, pick(req.body), { returnDocument: 'after', runValidators: true });
+  if (!achievement) return fail(res, 404, 'Achievement tidak ditemukan');
+  return ok(res, achievement, 'Achievement berhasil diupdate');
 };
 
-// Delete achievement (admin only)
+// DELETE /api/achievements/:id (admin)
 exports.deleteAchievement = async (req, res) => {
-  // TODO: Implementasi delete achievement
-  res.status(501).json({ message: 'Delete achievement belum diimplementasikan' });
+  const achievement = await Achievement.findByIdAndDelete(req.params.id);
+  if (!achievement) return fail(res, 404, 'Achievement tidak ditemukan');
+  return ok(res, undefined, 'Achievement berhasil dihapus');
 };
