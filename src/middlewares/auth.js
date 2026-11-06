@@ -15,7 +15,7 @@ async function requireAuth(req, res, next) {
     return fail(res, 401, 'Sesi tidak valid atau sudah kedaluwarsa, silakan login ulang');
   }
 
-  const admin = await Admin.findById(payload.sub);
+  const admin = await Admin.findById(Number(payload.sub));
   if (!admin) return fail(res, 401, 'Akun admin tidak ditemukan');
 
   req.admin = admin;

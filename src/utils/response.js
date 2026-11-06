@@ -24,9 +24,4 @@ function paginationMeta(page, limit, totalData) {
   return { page, limit, totalData, totalPages: Math.max(1, Math.ceil(totalData / limit)) };
 }
 
-/** Escape input pencarian agar aman dipakai di RegExp. */
-function searchRegex(text) {
-  return new RegExp(String(text).replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), 'i');
-}
-
-module.exports = { ok, fail, getPagination, paginationMeta, searchRegex };
+module.exports = { ok, fail, getPagination, paginationMeta };

@@ -1,5 +1,6 @@
 const Achievement = require('../models/Achievement');
-const { ok, fail, getPagination, paginationMeta, searchRegex } = require('../utils/response');
+const { ok, fail, getPagination, paginationMeta } = require('../utils/response');
+const { resolveFoto, deleteByUrl } = require('../utils/storage');
 
 const FIELDS = ['namaSiswa', 'judul', 'deskripsi', 'kategori', 'tahun', 'tanggal', 'foto'];
 function pick(body) {
@@ -12,18 +13,8 @@ function pick(body) {
 // GET /api/achievements?page&limit&search&kategori
 exports.getAllAchievements = async (req, res) => {
   const { page, limit, skip } = getPagination(req.query);
-  const filter = {};
-  if (req.query.search) {
-    const rx = searchRegex(req.query.search);
-    filter.$or = [{ namaSiswa: rx }, { judul: rx }];
-  }
-  if (req.query.kategori) filter.kategori = req.query.kategori;
-
-  const [achievements, totalData] = await Promise.all([
-    Achievement.find(filter).sort({ tanggal: -1, createdAt: -1 }).skip(skip).limit(limit),
-    Achievement.countDocuments(filter),
-  ]);
-  return ok(res, { achievements, pagination: paginationMeta(page, limit, totalData) });
+  const { items, total } = await Achievement.findAll({ search: req.query.search, kategori: req.query.kategori }, { limit, skip });
+  return ok(res, { achievements: items, pagination: paginationMeta(page, limit, total) });
 };
 
 // GET /api/achievements/:id
@@ -33,22 +24,33 @@ exports.getAchievementById = async (req, res) => {
   return ok(res, achievement);
 };
 
-// POST /api/achievements (admin)
+// POST /api/achievements (admin) — foto data URL di-upload ke Supabase Storage
 exports.createAchievement = async (req, res) => {
-  const achievement = await Achievement.create(pick(req.body));
+  const data = pick(req.body);
+  if (data.foto) data.foto = await resolveFoto(data.foto);
+  const achievement = await Achievement.create(data);
   return ok(res, achievement, 'Achievement berhasil dibuat', 201);
 };
 
 // PUT /api/achievements/:id (admin)
 exports.updateAchievement = async (req, res) => {
-  const achievement = await Achievement.findByIdAndUpdate(req.params.id, pick(req.body), { returnDocument: 'after', runValidators: true });
-  if (!achievement) return fail(res, 404, 'Achievement tidak ditemukan');
+  const existing = await Achievement.findById(req.params.id);
+  if (!existing) return fail(res, 404, 'Achievement tidak ditemukan');
+
+  const data = pick(req.body);
+  if (data.foto !== undefined && data.foto !== existing.foto) {
+    data.foto = await resolveFoto(data.foto);
+  }
+  const achievement = await Achievement.update(req.params.id, data);
+  // Foto diganti/dihapus -> bersihkan file lama di Storage.
+  if (data.foto !== undefined && data.foto !== existing.foto) await deleteByUrl(existing.foto);
   return ok(res, achievement, 'Achievement berhasil diupdate');
 };
 
 // DELETE /api/achievements/:id (admin)
 exports.deleteAchievement = async (req, res) => {
-  const achievement = await Achievement.findByIdAndDelete(req.params.id);
-  if (!achievement) return fail(res, 404, 'Achievement tidak ditemukan');
+  const deleted = await Achievement.remove(req.params.id);
+  if (!deleted) return fail(res, 404, 'Achievement tidak ditemukan');
+  await deleteByUrl(deleted.foto);
   return ok(res, undefined, 'Achievement berhasil dihapus');
 };

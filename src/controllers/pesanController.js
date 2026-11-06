@@ -16,23 +16,20 @@ exports.kirimPesan = async (req, res) => {
 // GET /api/pesan (admin)
 exports.getAllPesan = async (req, res) => {
   const { page, limit, skip } = getPagination(req.query, 100);
-  const [pesan, totalData] = await Promise.all([
-    Pesan.find().sort({ createdAt: -1 }).skip(skip).limit(limit),
-    Pesan.countDocuments(),
-  ]);
-  return ok(res, { pesan, pagination: paginationMeta(page, limit, totalData) });
+  const { items, total } = await Pesan.findAll({ limit, skip });
+  return ok(res, { pesan: items, pagination: paginationMeta(page, limit, total) });
 };
 
 // PUT /api/pesan/:id/dibaca (admin)
 exports.tandaiDibaca = async (req, res) => {
-  const pesan = await Pesan.findByIdAndUpdate(req.params.id, { dibaca: req.body.dibaca !== false }, { returnDocument: 'after' });
+  const pesan = await Pesan.setDibaca(req.params.id, req.body.dibaca !== false);
   if (!pesan) return fail(res, 404, 'Pesan tidak ditemukan');
   return ok(res, pesan);
 };
 
 // DELETE /api/pesan/:id (admin)
 exports.hapusPesan = async (req, res) => {
-  const pesan = await Pesan.findByIdAndDelete(req.params.id);
-  if (!pesan) return fail(res, 404, 'Pesan tidak ditemukan');
+  const deleted = await Pesan.remove(req.params.id);
+  if (!deleted) return fail(res, 404, 'Pesan tidak ditemukan');
   return ok(res, undefined, 'Pesan berhasil dihapus');
 };

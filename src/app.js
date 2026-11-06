@@ -1,6 +1,6 @@
 const express = require('express');
 const cors = require('cors');
-const mongoose = require('mongoose');
+const { isConnected, query } = require('./config/db');
 
 const app = express();
 
@@ -24,11 +24,21 @@ app.use(express.json({ limit: '2mb' }));
 app.use(express.urlencoded({ extended: true }));
 
 // Health check endpoint
-app.get('/api/health', (req, res) => {
-  res.status(200).json({
-    status: 'OK',
+// (Juga berguna untuk ping berkala agar server Render & project Supabase tidak tidur.)
+app.get('/api/health', async (req, res) => {
+  let database = 'disconnected';
+  if (isConnected()) {
+    try {
+      await query('SELECT 1');
+      database = 'connected';
+    } catch {
+      database = 'error';
+    }
+  }
+  res.status(database === 'connected' ? 200 : 503).json({
+    status: database === 'connected' ? 'OK' : 'ERROR',
     message: 'Server Bimbel Wanda berjalan dengan baik',
-    database: mongoose.connection.readyState === 1 ? 'connected' : 'disconnected',
+    database,
     timestamp: new Date().toISOString(),
   });
 });
@@ -58,12 +68,12 @@ app.use((err, req, res, next) => {
   if (err.type === 'entity.parse.failed') {
     return res.status(400).json({ status: 'error', message: 'Format JSON tidak valid' });
   }
-  if (err.name === 'ValidationError') {
-    const errors = Object.values(err.errors).map((e) => ({ field: e.path, message: e.message }));
-    return res.status(400).json({ status: 'error', message: errors[0]?.message || 'Data tidak valid', errors });
-  }
-  if (err.code === 11000) {
+  // Kode error PostgreSQL: https://www.postgresql.org/docs/current/errcodes-appendix.html
+  if (err.code === '23505') {
     return res.status(409).json({ status: 'error', message: 'Data sudah ada' });
+  }
+  if (['23502', '23514', '22P02', '22001', '22007', '22008'].includes(err.code)) {
+    return res.status(400).json({ status: 'error', message: 'Data tidak valid' });
   }
 
   console.error(err);

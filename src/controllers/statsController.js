@@ -6,20 +6,18 @@ const { ok } = require('../utils/response');
 
 // GET /api/stats (admin) — ringkasan untuk dashboard
 exports.getStats = async (req, res) => {
-  const [programs, achievements, pendaftar, pendaftarBaru, pesanBelumDibaca, perStatus] = await Promise.all([
-    Program.countDocuments(),
-    Achievement.countDocuments(),
-    Pendaftar.countDocuments(),
-    Pendaftar.countDocuments({ status: 'Baru' }),
-    Pesan.countDocuments({ dibaca: false }),
-    Pendaftar.aggregate([{ $group: { _id: '$status', total: { $sum: 1 } } }]),
+  const [programs, achievements, pendaftar, pesanBelumDibaca] = await Promise.all([
+    Program.count(),
+    Achievement.count(),
+    Pendaftar.stats(),
+    Pesan.countUnread(),
   ]);
   return ok(res, {
     programs,
     achievements,
-    pendaftar,
-    pendaftarBaru,
+    pendaftar: pendaftar.total,
+    pendaftarBaru: pendaftar.byStatus.Baru || 0,
     pesanBelumDibaca,
-    pendaftarPerStatus: Object.fromEntries(perStatus.map((s) => [s._id, s.total])),
+    pendaftarPerStatus: pendaftar.byStatus,
   });
 };

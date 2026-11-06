@@ -2,6 +2,7 @@ require('dotenv').config();
 const crypto = require('crypto');
 const { connectDB, disconnectDB } = require('./config/db');
 const { ensureSeed } = require('./seed/seed');
+const { ensureBucket } = require('./utils/storage');
 
 const PORT = process.env.PORT || 5000;
 
@@ -19,6 +20,7 @@ const app = require('./app');
 async function start() {
   await connectDB();
   await ensureSeed();
+  await ensureBucket().catch((error) => console.warn('Supabase Storage belum siap:', error.message));
 
   const server = app.listen(PORT, () => {
     console.log(`Server berjalan di http://localhost:${PORT}`);

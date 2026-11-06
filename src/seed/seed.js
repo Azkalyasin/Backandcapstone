@@ -10,7 +10,7 @@ const data = require('./data');
  *   (matikan dengan SEED_SAMPLE_DATA=false).
  */
 async function ensureSeed() {
-  if ((await Admin.countDocuments()) === 0) {
+  if ((await Admin.count()) === 0) {
     const username = process.env.ADMIN_USERNAME || 'admin';
     let password = process.env.ADMIN_PASSWORD;
     if (!password) {
@@ -26,12 +26,12 @@ async function ensureSeed() {
 
   if (process.env.SEED_SAMPLE_DATA === 'false') return;
 
-  if ((await Program.countDocuments()) === 0) {
-    await Program.insertMany(data.programs);
+  if ((await Program.count()) === 0) {
+    for (const program of data.programs) await Program.create(program);
     console.log(`Seed: ${data.programs.length} program contoh ditambahkan.`);
   }
-  if ((await Achievement.countDocuments()) === 0) {
-    await Achievement.insertMany(data.achievements);
+  if ((await Achievement.count()) === 0) {
+    for (const achievement of data.achievements) await Achievement.create(achievement);
     console.log(`Seed: ${data.achievements.length} achievement contoh ditambahkan.`);
   }
 }

@@ -1,37 +1,79 @@
+const fs = require('fs');
 const path = require('path');
-const mongoose = require('mongoose');
+const { Pool, types } = require('pg');
 
-let memoryServer = null;
+// Kolom DATE dikembalikan apa adanya ('YYYY-MM-DD'), bukan objek Date (hindari geser zona waktu).
+types.setTypeParser(1082, (value) => value);
+
+let pool = null;
 
 /**
- * Hubungkan ke MongoDB.
- * - Jika MONGODB_URI diisi (mis. MongoDB Atlas gratis) -> pakai itu.
- * - Jika kosong & bukan production -> jalankan MongoDB in-memory (data hilang saat server mati),
+ * Hubungkan ke PostgreSQL.
+ * - DATABASE_URL diisi (mis. Supabase) -> pakai itu.
+ * - Kosong & bukan production -> database in-memory (pg-mem), data hilang saat server mati,
  *   supaya backend bisa langsung dicoba tanpa install apa pun.
  */
 async function connectDB() {
-  let uri = process.env.MONGODB_URI;
+  const url = process.env.DATABASE_URL;
 
-  if (!uri) {
-    if (process.env.NODE_ENV === 'production') {
-      throw new Error('MONGODB_URI wajib diisi di production.');
-    }
-    const { MongoMemoryServer } = require('mongodb-memory-server');
-    memoryServer = await MongoMemoryServer.create({
-      // Simpan binary mongod di folder backend agar tidak diunduh ulang dari direktori lain.
-      binary: { downloadDir: path.join(__dirname, '../../node_modules/.cache/mongodb-memory-server') },
+  if (url) {
+    const isLocal = /@(localhost|127\.0\.0\.1)[:/]/.test(url);
+    pool = new Pool({
+      connectionString: url,
+      // Supabase mewajibkan SSL.
+      ssl: isLocal || process.env.DATABASE_SSL === 'false' ? false : { rejectUnauthorized: false },
+      max: Number(process.env.DATABASE_POOL_MAX) || 5,
     });
-    uri = memoryServer.getUri('bimbel-wanda');
-    console.warn('⚠️  MONGODB_URI kosong — memakai database in-memory (data hilang saat server berhenti).');
+    const { rows } = await pool.query('SELECT current_database() AS db');
+    console.log(`PostgreSQL terhubung: ${rows[0].db}`);
+  } else {
+    if (process.env.NODE_ENV === 'production') {
+      throw new Error('DATABASE_URL wajib diisi di production.');
+    }
+    const { newDb } = require('pg-mem');
+    const mem = newDb();
+    const { Pool: MemPool } = mem.adapters.createPg();
+    pool = new MemPool();
+    pool.isMemory = true;
+    console.warn('⚠️  DATABASE_URL kosong — memakai database in-memory (data hilang saat server berhenti).');
   }
 
-  await mongoose.connect(uri, { serverSelectionTimeoutMS: 10000 });
-  console.log(`MongoDB terhubung: ${mongoose.connection.host}/${mongoose.connection.name}`);
+  await initSchema();
+}
+
+/** Buat tabel jika belum ada (sql/schema.sql). */
+async function initSchema() {
+  let sql = fs.readFileSync(path.join(__dirname, '../../sql/schema.sql'), 'utf8');
+  if (pool.isMemory) {
+    // pg-mem tidak mendukung RLS & CREATE INDEX IF NOT EXISTS; abaikan baris tersebut saat dev.
+    sql = sql
+      .split('\n')
+      .filter((line) => !/ROW LEVEL SECURITY|CREATE INDEX/.test(line))
+      .join('\n');
+  }
+  // Hapus komentar lalu jalankan per pernyataan.
+  const statements = sql
+    .replace(/--.*$/gm, '')
+    .split(';')
+    .map((s) => s.trim())
+    .filter(Boolean);
+  for (const statement of statements) {
+    await pool.query(statement);
+  }
+}
+
+function query(text, params) {
+  if (!pool) throw new Error('Database belum terhubung.');
+  return pool.query(text, params);
+}
+
+function isConnected() {
+  return Boolean(pool);
 }
 
 async function disconnectDB() {
-  await mongoose.disconnect();
-  if (memoryServer) await memoryServer.stop();
+  if (pool) await pool.end();
+  pool = null;
 }
 
-module.exports = { connectDB, disconnectDB };
+module.exports = { connectDB, disconnectDB, query, isConnected };

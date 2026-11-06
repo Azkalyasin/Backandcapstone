@@ -1,4 +1,3 @@
-const mongoose = require('mongoose');
 const { validationResult } = require('express-validator');
 const { fail } = require('../utils/response');
 
@@ -10,9 +9,13 @@ function validate(req, res, next) {
   return fail(res, 400, errors[0].message, errors);
 }
 
-/** Tolak :id yang bukan ObjectId MongoDB agar tidak memicu error 500. */
+/** :id harus bilangan bulat positif (kolom SERIAL), selain itu langsung 404. */
 function validId(req, res, next) {
-  if (!mongoose.isValidObjectId(req.params.id)) return fail(res, 404, 'Data tidak ditemukan');
+  const id = Number(req.params.id);
+  if (!/^\d+$/.test(req.params.id) || !Number.isSafeInteger(id) || id < 1 || id > 2147483647) {
+    return fail(res, 404, 'Data tidak ditemukan');
+  }
+  req.params.id = id;
   next();
 }
 
